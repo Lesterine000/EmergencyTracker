@@ -1,7 +1,9 @@
 
 import pandas as pd
-RUTA_CSV = r"C:\Users\victor.gonsua.3\Desktop\BIGDATA\Docker\EmergencyTracker-main\data\admisiones_historico.csv"
-RUTA_JSON = r"C:\Users\victor.gonsua.3\Desktop\BIGDATA\Docker\EmergencyTracker-main\data\partes_clinicos.json"
+
+RUTA_CSV = "../data/admisiones_historico.csv"
+RUTA_JSON = "../data/partes_clinicos.json"
+
 def FuncionLectura(ruta_csv: str, ruta_json: str):
         print("Iniciando la lectura de ficheros locales...")
         df_admisiones = pd.read_csv(ruta_csv, sep=',')
