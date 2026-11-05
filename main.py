@@ -1,14 +1,21 @@
 from src import etl_historico
 from src import config
 from src import urgencias_worker
+
 def main():
     print('Iniciando emergency tracker')
-    print("\n")
-    print('Realizamos la limpieza de datos')
-    # rellenar con la funcion con la que se iniciara etl_historico
-    # etl_historico.limpieza_datos(config.RUTA_CVS, config.RUTA_JSON)
-    # Consulta a la API
-    urgencias_worker.urgencias()
+    print()
+
+    print('Realizamos la limpieza y el cruce de datos')
+
+    # Ejecuta el ETL completo
+    df_final = etl_historico.etl_historico(
+        config.RUTA_CSV,
+        config.RUTA_JSON
+    )
+
+    print("\nETL completado correctamente")
+    print(f"Total de episodios cruzados: {len(df_final)}")
 
 if __name__ == "__main__":
     main()

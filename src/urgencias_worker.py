@@ -1,6 +1,5 @@
 import requests
 import json
-import redis
 import time
 import src.config as config
 
@@ -19,22 +18,6 @@ def api_hospital(ruta_api:str):
     except requests.exceptions.RequestException as exception:
         raise(f"Ocurrio un error inesperado{exception}")
 
-def redisConecction():
-    try:
-        r = redis.Redis(host='localhost', port=6379, db=0)
-    except redis.exceptions.ConnectionError as connection_error:
-        raise ConnectionError(
-            f"Error de conexión con Redis: {connection_error}"
-        ) from connection_error
-    except redis.exceptions.TimeoutError as timeout_error:
-        raise TimeoutError(
-            f"Tiempo de espera agotado para Redis: {timeout_error}"
-        ) from timeout_error
-    except redis.exceptions.RedisError as redis_error:
-        raise redis.RedisError(
-            f"Ocurrió un error con Redis: {redis_error}"
-        ) from redis_error
-    boxes(r)    
 def worker_urgencias():
     print("Iniciando el worker de urgencias...")
     while True:
@@ -45,17 +28,6 @@ def worker_urgencias():
         time.sleep(5)  # Espera 5 segundos antes de la siguiente iteración
 
 
-def boxes(r):
-    print("Los 5 boxes están inicializados.")
-    for numero in range(1, 6):
-        clave = f"box:{numero}"
-        if not r.exists(clave):
-            r.hset(clave, mapping={
-                "box_id": str(numero),
-                "paciente_id": "",
-                "hora_entrada": ""
-            })
 
 def urgencias():
     worker_urgencias()
-    redisConecction()
