@@ -8,7 +8,8 @@ def api_hospital(ruta_api:str):
     try:
         response = requests.get(ruta_api, timeout=5)
         if response.status_code == 200:
-            print(json.dumps(response.json(), indent=4))
+            pass
+        #print(json.dumps(response.json(), indent=4))
     except requests.exceptions.HTTPError as http_error:
         raise(f"Error http{http_error}")
     except requests.exceptions.ConnectTimeout as timeout:
@@ -33,7 +34,7 @@ def redisConecction():
         raise redis.RedisError(
             f"Ocurrió un error con Redis: {redis_error}"
         ) from redis_error
-
+    boxes(r)    
 def worker_urgencias():
     print("Iniciando el worker de urgencias...")
     while True:
@@ -44,8 +45,16 @@ def worker_urgencias():
         time.sleep(5)  # Espera 5 segundos antes de la siguiente iteración
 
 
-def boxes():
-    pass
+def boxes(r):
+    print("Los 5 boxes están inicializados.")
+    for numero in range(1, 6):
+        clave = f"box:{numero}"
+        if not r.exists(clave):
+            r.hset(clave, mapping={
+                "box_id": str(numero),
+                "paciente_id": "",
+                "hora_entrada": ""
+            })
 
 def urgencias():
     worker_urgencias()
