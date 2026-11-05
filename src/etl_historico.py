@@ -39,7 +39,6 @@ def parsear_fecha(valor) -> float | None:
     except Exception:
         return None
 
-
 def limpiar_destino_alta(valor: str) -> str:
     """Normaliza los valores de destino_alta a dos categorías + Desconocido."""
     if pd.isna(valor):
@@ -50,7 +49,6 @@ def limpiar_destino_alta(valor: str) -> str:
     if "ingreso" in v or "planta" in v or "pediatria" in v or "uci" in v:
         return "ingreso_planta"
     return "Desconocido"
-
 
 def limpieza_csv(df: pd.DataFrame) -> pd.DataFrame:
     # Duplicados y nulos en campos obligatorios
@@ -80,10 +78,9 @@ def limpieza_csv(df: pd.DataFrame) -> pd.DataFrame:
         .str.replace("_", "/", regex=False)
         .replace(["nan", "PENDIENTE", "NaN"], "Desconocido")
     )
-
+    
     # Normalizar destino_alta
     df["destino_alta"] = df["destino_alta"].apply(limpiar_destino_alta)
-
     # Normalizar motivo_consulta a minúsculas sin espacios extra
     df["motivo_consulta"] = df["motivo_consulta"].astype(str).str.strip().str.lower()
 
@@ -108,7 +105,6 @@ def limpieza_json(df: pd.DataFrame) -> pd.DataFrame:
 
     # Normalizar categoria_patologia
     df["categoria_patologia"] = df["categoria_patologia"].astype(str).str.strip().str.title()
-
     print(f"  JSON limpio: {len(df)} registros válidos")
     return df
 
@@ -122,7 +118,6 @@ def construir_documentos(df_csv: pd.DataFrame, df_json: pd.DataFrame) -> list[di
     """
     df = pd.merge(df_csv, df_json, on="id_episodio", how="inner")
     print(f"  Merge completado: {len(df)} episodios cruzados")
-
     documentos = []
     for _, row in df.iterrows():
         doc = {
@@ -147,7 +142,6 @@ def construir_documentos(df_csv: pd.DataFrame, df_json: pd.DataFrame) -> list[di
             "alergias":             row.get("alergias"),
         }
         documentos.append(doc)
-
     return documentos
 
 # Punto de entrada
