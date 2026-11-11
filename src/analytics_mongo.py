@@ -1,3 +1,4 @@
+import pandas as pd
 from pymongo import MongoClient, ASCENDING
 from pymongo.errors import BulkWriteError
 from config import MONGO_URI, MONGO_DB, MONGO_COLLECTION
@@ -166,15 +167,25 @@ def destino_alta_por_grupo_edad() -> list[dict]:
 
 # MAIN
 if __name__ == "__main__":
-    from etl_historico import run_etl
+    from etl_historico import etl_historico
+    from config import RUTA_CSV, RUTA_JSON
 
-    print(" Ejecutando ETL...")
-    documentos = run_etl()
+    print("Ejecutando ETL...")
+    df = etl_historico(RUTA_CSV, RUTA_JSON)
 
-    print(" Cargando en MongoDB...")
+    # Convertir timestamps a epoch float para que $subtract funcione en Mongo
+    for col in ["timestamp_llegada", "timestamp_alta"]:
+        if col in df.columns:
+            df[col] = df[col].apply(
+                lambda x: x.timestamp() if pd.notna(x) else None
+            )
+
+    import pandas as pd
+    documentos = df.to_dict(orient="records")
+
+    print("Cargando en MongoDB...")
     cargar_episodios(documentos)
 
-    # ── Consulta 1 ──────────────────────────────
     print("\n──────────────────────────────────────────")
     print("  Estancia media (min) por categoría patológica")
     print("──────────────────────────────────────────")
@@ -182,7 +193,6 @@ if __name__ == "__main__":
         print(f"  {r['categoria_patologia']:<25} {r['estancia_media_min']:>8.2f} min"
               f"   (n={r['total_episodios']})")
 
-    # ── Consulta 2 ──────────────────────────────
     print("\n──────────────────────────────────────────")
     print("  Destino al alta (%) por grupo de edad")
     print("──────────────────────────────────────────")
