@@ -1,31 +1,5 @@
 from datetime import datetime
 
-import redis
-import src.config as config
-
-def redisConecction():
-    try:
-        r = redis.Redis(host='localhost', port=6379, db=0)
-        r.ping()
-
-        return r
-    
-    except redis.exceptions.ConnectionError as connection_error:
-        raise ConnectionError(
-            f"Error de conexión con Redis: {connection_error}"
-        ) from connection_error
-    
-    except redis.exceptions.TimeoutError as timeout_error:
-        raise TimeoutError(
-            f"Tiempo de espera agotado para Redis: {timeout_error}"
-        ) from timeout_error
-    
-    except redis.exceptions.RedisError as redis_error:
-        raise redis.RedisError(
-            f"Ocurrió un error con Redis: {redis_error}"
-        ) from redis_error
-    
-# Iniciar los boxes
 def inicializar_boxes(r):
     
     for numero in range(1, 6):
@@ -211,8 +185,6 @@ def alta_paciente(r, alta):
                     f"Box {box_id} liberado."
                 )
 
-                añadir_paciente_box(r)
-
                 return True
             return False
         if r.zrem("urgencias:cola_espera", id_episodio):
@@ -229,6 +201,5 @@ def calcular_deadline(paciente):
 
     return hora_entrada + tiempo_maximo * 60
 
-def inicializar_redis():
-    redis_connection = redisConecction()
-    inicializar_boxes(redis_connection)
+def inicializar_redis(r):
+    inicializar_boxes(r)
