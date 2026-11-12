@@ -1,6 +1,6 @@
 import pandas as pd
 import re
-from config import RUTA_CSV, RUTA_JSON
+from src.config import RUTA_CSV, RUTA_JSON
 
 import pandas as pd
 
