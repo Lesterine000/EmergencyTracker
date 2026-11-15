@@ -61,6 +61,39 @@ def anonimizar_edad_dataframe(df):
 
     return df
 
+def eliminar_nombres(valor):
+
+    if isinstance(valor, dict):
+        return {
+            clave: eliminar_nombres(contenido)
+            for clave, contenido in valor.items()
+            if str(clave).lower() != "nombre"
+        }
+
+    elif isinstance(valor, list):
+        return [
+            eliminar_nombres(elemento)
+            for elemento in valor
+        ]
+
+    return valor
+
+def eliminar_nombres_dataframe(df):
+
+    df = df.copy()
+
+    columnas_nombre = [
+        columna for columna in df.columns
+        if str(columna).lower() == "nombre"
+    ]
+
+    df = df.drop(columns=columnas_nombre)
+
+    for columna in df.columns:
+        df[columna] = df[columna].apply(eliminar_nombres)
+
+    return df
+
 def anonimizar_dataframe(df, clave):
 
     print("\nIniciando anonimización...")
@@ -71,7 +104,11 @@ def anonimizar_dataframe(df, clave):
     # Agrupa las edades
     df_anonimizado = anonimizar_edad_dataframe(df_anonimizado)
 
+    # Elimina los nombres de los datos
+    df_anonimizado = eliminar_nombres_dataframe(df_anonimizado)
+
     print("Anonimización completada correctamente")
     print(f"Total de episodios anonimizados: {len(df_anonimizado)}")
 
     return df_anonimizado
+
