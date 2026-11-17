@@ -174,13 +174,12 @@ if __name__ == "__main__":
     df = etl_historico(RUTA_CSV, RUTA_JSON)
 
     # Convertir timestamps a epoch float para que $subtract funcione en Mongo
-    for col in ["timestamp_llegada", "timestamp_alta"]:
-        if col in df.columns:
-            df[col] = df[col].apply(
+    for campo in ["timestamp_llegada", "timestamp_alta"]:
+        if campo in df.columns:
+            df[campo] = df[campo].apply(
                 lambda x: x.timestamp() if pd.notna(x) else None
             )
 
-    import pandas as pd
     documentos = df.to_dict(orient="records")
 
     print("Cargando en MongoDB...")
