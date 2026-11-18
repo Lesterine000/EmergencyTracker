@@ -17,12 +17,6 @@ def main():
 
     print("\nETL completado correctamente")
     print(f"Total de episodios cruzados: {len(df_final)}")
-    # Realiza la conexion con Redis y ejecutamos el worker de urgencias
-    r = redisConecction()
-    
-    triage_redis.inicializar_redis(r)
-
-    urgencias_worker.urgencias(r)
 
     # --- ANONIMIZADOR ---
 
@@ -33,6 +27,13 @@ def main():
         df_final,
         config.HMAC_SECRET
     )
+
+    # Realiza la conexion con Redis y ejecutamos el worker de urgencias
+    r = redisConecction()
+    
+    triage_redis.inicializar_redis(r)
+
+    urgencias_worker.urgencias(r)
 
 def redisConecction():
     try:
