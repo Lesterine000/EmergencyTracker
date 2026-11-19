@@ -471,7 +471,7 @@ Criterios de finalización definidos para el motor de colas:
 - [ ] `analytics_mongo.py` no se llama desde `main.py` y carga los datos **sin anonimizar**.
 - [ ] Consulta 1 de MongoDB: `categoria_patologia` está dentro de `triaje_manchester`, por lo que el filtro debería usar `triaje_manchester.categoria_patologia`; tal como está no devuelve resultados.
 - [ ] Consulta 2 de MongoDB: filtra `"Desconocido"`, pero el ETL lo deja en minúsculas (`"desconocido"`).
-- [ ] Unificar los valores de `destino_alta` (`alta_traslado_uci` / `traslado_uci`, `alta_domicilio` / `domicilio`, `alta`…).
+- [x] Unificar los valores de `destino_alta` (`alta_traslado_uci` / `traslado_uci`, `alta_domicilio` / `domicilio`, `alta`…).
 - [ ] `urgencias_worker.api_hospital`: `raise(f"...")` lanza una cadena (provoca `TypeError` en vez del mensaje previsto) y si la API no devuelve 200 la función devuelve `None`. El worker no se cae porque lo captura el `except` general, pero el mensaje que se muestra no es el correcto. Solución: `raise ConnectionError(f"...") from error` y `response.raise_for_status()`.
 - [x] `triage_redis.py`: eliminadas las funciones duplicadas por el merge.
 - [ ] `triage_redis.py`: `liberar_box` no devuelve `True`, por lo que `alta_paciente` libera el box pero no lo informa.

@@ -42,12 +42,24 @@ def limpieza_csv(df_admisiones):
         .replace(['nan', 'pendiente'], 'desconocido')
     )
 
-    # Limpia el destino de alta
+        # Limpia y unifica el destino de alta
+    equivalencias_destino = {
+        'alta_domicilio': 'domicilio',
+        'alta_traslado_uci': 'traslado_uci',
+        'alta_observacion': 'observacion',
+        'alta_ingreso_pediatria': 'ingreso_pediatria',
+        'alta_ingreso_planta': 'ingreso_planta',
+        'nan': 'desconocido',
+        'pendiente': 'desconocido'
+    }
+
     df_admisiones['destino_alta'] = (
         df_admisiones['destino_alta']
-        .replace(['nan', 'pendiente'], 'desconocido')
+        .replace(equivalencias_destino)
         .fillna('desconocido')
     )
+
+    print(df_admisiones['destino_alta'].value_counts(dropna=False))
 
     return df_admisiones
 
@@ -78,6 +90,21 @@ def quitar_nulo_duplicados_csv(df):
         errors='coerce',
         utc=True
     )
+
+    # Detecta episodios cuya fecha de alta es anterior a la llegada
+    fechas_invalidas = (
+        df['timestamp_alta'].notna() &
+        df['timestamp_llegada'].notna() &
+        (df['timestamp_alta'] < df['timestamp_llegada'])
+    )
+
+    print(
+        "Episodios con fecha de alta anterior a la llegada:",
+        fechas_invalidas.sum()
+    )
+
+    # Elimina los episodios con fechas incoherentes
+    df = df.loc[~fechas_invalidas].copy()
 
     return df
 
