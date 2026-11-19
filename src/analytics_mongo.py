@@ -2,6 +2,8 @@ import pandas as pd
 from pymongo import MongoClient, ASCENDING
 from pymongo.errors import BulkWriteError
 from config import MONGO_URI, MONGO_DB, MONGO_COLLECTION
+from anonymizer import anonimizar_dataframe
+from config import HMAC_SECRET
 
 # CONEXIÓN
 def get_collection():
@@ -39,7 +41,7 @@ def estancia_media_por_patologia() -> list[dict]:
             "$match": {
                 "timestamp_alta":       {"$exists": True, "$ne": None},
                 "timestamp_llegada":    {"$exists": True, "$ne": None},
-                "categoria_patologia":  {"$exists": True, "$ne": None}
+                "triaje_manchester.categoria_patologia": {"$exists": True, "$ne": None}
             }
         },
         {
@@ -60,7 +62,7 @@ def estancia_media_por_patologia() -> list[dict]:
         },
         {
             "$group": {
-                "_id": "$categoria_patologia",
+                "_id": "$triaje_manchester.categoria_patologia",
                 "estancia_media_min": {"$avg": "$estancia_min"},
                 "total_episodios":    {"$sum": 1}
             }
@@ -68,30 +70,38 @@ def estancia_media_por_patologia() -> list[dict]:
         {"$sort": {"estancia_media_min": -1}},
         {
             "$project": {
-                "_id": 0,
+                "_id":                 0,
                 "categoria_patologia": "$_id",
                 "estancia_media_min":  {"$round": ["$estancia_media_min", 2]},
-                "total_episodios":     1
+                "total_episodios":     "$total_episodios"
             }
         }
     ]
     return list(col.aggregate(pipeline))
 
+
 # CONSULTA 2: Destino al alta por grupo de edad decenal
 def destino_alta_por_grupo_edad() -> list[dict]:
-
-    #Distribución porcentual de destino_alta (domicilio / ingreso_planta)
-    #agrupada por rangos decenales de edad.
+    """
+    Distribución porcentual de destino_alta agrupada por rangos decenales de edad.
+    """
     col = get_collection()
 
     pipeline = [
         {
             "$match": {
-                "destino_alta": {"$exists": True, "$nin": [None, "Desconocido"]},
-                "edad":         {"$exists": True, "$gt": 0, "$lt": 130}
+                "destino_alta": {
+                    "$exists": True,
+                    "$nin": [None, "desconocido"]
+                },
+                "edad": {
+                    "$exists": True,
+                    "$gt": 0,
+                    "$lt": 130
+                }
             }
         },
-        # Rango decenal: "60-69", "70-79", etc.
+        # Calcular rango decenal: "0-9", "10-19", "20-29", etc.
         {
             "$addFields": {
                 "grupo_edad": {
@@ -152,18 +162,27 @@ def destino_alta_por_grupo_edad() -> list[dict]:
                 }
             }
         },
-        {"$sort": {"_id": 1}},
+        # Ordenar por valor numérico del inicio del rango
+        {
+            "$addFields": {
+                "orden": {
+                    "$toInt": {"$arrayElemAt": [{"$split": ["$_id", "-"]}, 0]}
+                }
+            }
+        },
+        {"$sort": {"orden": 1}},
         {
             "$project": {
-                "_id": 0,
+                "_id":             0,
                 "grupo_edad":      "$_id",
                 "total_episodios": "$total",
-                "distribucion":    1
+                "distribucion":    "$distribucion"
             }
         }
     ]
 
     return list(col.aggregate(pipeline))
+
 
 # MAIN
 if __name__ == "__main__":
@@ -172,6 +191,7 @@ if __name__ == "__main__":
 
     print("Ejecutando ETL...")
     df = etl_historico(RUTA_CSV, RUTA_JSON)
+    df = anonimizar_dataframe(df, HMAC_SECRET)
 
     # Convertir timestamps a epoch float para que $subtract funcione en Mongo
     for campo in ["timestamp_llegada", "timestamp_alta"]:
