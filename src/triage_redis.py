@@ -68,7 +68,59 @@ def liberar_box(r, box_id):
         return True
     return False
 
+def valor_para_redis(valor):
+    # Redis solo admite texto y números: se convierten el resto de tipos
+    if valor is None:
+        return ""
+    if isinstance(valor, bool):
+        return str(valor).lower()
+    if isinstance(valor, (dict, list)):
+        return json.dumps(valor, ensure_ascii=False)
+    return valor
 
+def recuperar_datos_paciente(ingreso):
+    # Recupera los datos del paciente del JSON de la API y los deja en un
+    # diccionario plano (campo -> valor) listo para guardarlo en Redis.
+    # Los bloques anidados (datos_admision, datos_triaje...) se aplanan y,
+    # si un campo se repite en dos bloques, se le añade el nombre del bloque.
+    datos = {}
+
+    for clave, valor in ingreso.items():
+        if isinstance(valor, dict):
+            for subclave, subvalor in valor.items():
+                nombre = subclave if subclave not in datos else f"{clave}_{subclave}"
+                datos[nombre] = valor_para_redis(subvalor)
+        else:
+            datos[clave] = valor_para_redis(valor)
+
+    # Datos de control del triaje
+    datos["deadline"] = calcular_deadline(ingreso)
+    datos["estado"] = "EN_ESPERA"
+    datos["box_id"] = ""
+
+    return datos
+
+def almacenar_paciente(r, datos_paciente):
+    # Guarda los datos del paciente en el hash "paciente:<id_episodio>"
+    id_episodio = datos_paciente["id_episodio"]
+    r.hset(f"paciente:{id_episodio}", mapping=datos_paciente)
+    print(f"Datos del paciente {id_episodio} guardados en Redis.")
+    return True
+
+def consultar_paciente(r, id_episodio):
+    # Devuelve los datos guardados de un paciente (diccionario vacío si no existe)
+    datos = r.hgetall(f"paciente:{id_episodio}")
+    return {
+        clave.decode("utf-8"): valor.decode("utf-8")
+        for clave, valor in datos.items()
+    }
+
+def actualizar_estado_paciente(r, id_episodio, **campos):
+    # Actualiza el estado del paciente (EN_ESPERA, EN_BOX, ALTA) si está guardado
+    clave = f"paciente:{id_episodio}"
+    if r.exists(clave):
+        r.hset(clave, mapping=campos)
+        
 def añadir_paciente_cola_espera(r, paciente):
     id_episodio = paciente["id_episodio"]
     deadline = calcular_deadline(paciente)
