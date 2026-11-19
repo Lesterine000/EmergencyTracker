@@ -37,19 +37,19 @@ def main():
 
 def redisConecction():
     try:
-        r = redis.Redis(host='localhost', port=6379, db=0)
+        r = redis.Redis(host=config.REDIS_HOST, port=config.REDIS_PORT, db=0)
         r.ping()
 
         return r
     
     except redis.exceptions.ConnectionError as connection_error:
         raise ConnectionError(
-            f"Error de conexión con Redis: {connection_error}"
+            f"Error de conexión con Redis en {config.REDIS_HOST}:{config.REDIS_PORT}: {connection_error}"
         ) from connection_error
     
     except redis.exceptions.TimeoutError as timeout_error:
         raise TimeoutError(
-            f"Tiempo de espera agotado para Redis: {timeout_error}"
+            f"Tiempo de espera agotado para Redis en {config.REDIS_HOST}:{config.REDIS_PORT}: {timeout_error}"
         ) from timeout_error
     
     except redis.exceptions.RedisError as redis_error:

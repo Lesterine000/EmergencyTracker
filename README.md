@@ -53,9 +53,9 @@ flowchart LR
 Flujo de `main.py`:
 
 1. Ejecuta el ETL completo (lectura → limpieza → cruce).
-2. Conecta con Redis (`localhost:6379`) y crea los boxes si no existen.
-3. Arranca el worker de urgencias (bucle continuo).
-4. Anonimiza el DataFrame resultante del ETL.
+2. Anonimiza el DataFrame resultante del ETL.
+3. Conecta con Redis (`REDIS_HOST:REDIS_PORT`, por defecto `localhost:6379`) y crea los boxes si no existen.
+4. Arranca el worker de urgencias (bucle continuo).
 
 ---
 
@@ -139,7 +139,8 @@ Centraliza la configuración:
 
 - `RUTA_CSV` y `RUTA_JSON`: rutas relativas a la carpeta `data/`.
 - `RUTA_API`: `http://10.201.59.248:28000/api/v1/urgencias/novedades`.
-- `MONGO_URI` (`mongodb://localhost:27017`), `MONGO_DB` (`hospital`) y `MONGO_COLLECTION` (`episodios_urgencias`).
+- `REDIS_HOST`, `REDIS_PORT`, `MONGO_HOST` y `MONGO_PORT`: se leen de variables de entorno. Si no existen se usa `localhost` con los puertos 6379 y 27017, que es lo que hace falta al ejecutar en local. Dentro de Docker, el `docker-compose.yml` los define con el nombre de cada servicio (`redis` y `mongodb`).
+- `MONGO_URI` (se construye como `mongodb://MONGO_HOST:MONGO_PORT`), `MONGO_DB` (`hospital`) y `MONGO_COLLECTION` (`episodios_urgencias`).
 - `HMAC_SECRET`: se lee del fichero `.env`. **Si no existe, el programa se detiene** con un `ValueError`.
 
 ### `src/etl_historico.py` — Extracción, limpieza y cruce
@@ -317,17 +318,48 @@ docker compose up -d mongodb redis
 
 Esto levanta `mongodb_container` (puerto 27017) y `redis_container` (puerto 6379).
 
-> El servicio `app` del compose instala las dependencias y ejecuta `main.py` dentro de un contenedor `python:3.11-slim`. Para usarlo, el código debe conectarse a los hosts `redis` y `mongodb` (nombres de servicio) en lugar de `localhost`. Ver [pendientes](#estado-actual-y-trabajo-pendiente).
-
 ### 5. Ejecutar
 
+Hay dos formas de ejecutar el programa; el código es el mismo en ambas.
+
+**Opción A — Python en local, MongoDB y Redis en Docker** (con el paso 4 hecho):
+
 ```bash
-# ETL + worker de urgencias en tiempo real
+# ETL + anonimización + worker de urgencias en tiempo real
 python main.py
 
 # Carga en MongoDB y consultas analíticas
 python src/analytics_mongo.py
 ```
+
+**Opción B — Todo dentro de Docker**:
+
+```bash
+docker compose up
+```
+
+El servicio `app` usa la imagen `python:3.11-slim`, instala `requirements.txt` y ejecuta `main.py`. Monta la carpeta del proyecto en `/app` (incluido el `.env`) y se conecta a Redis y MongoDB por el nombre de su servicio, gracias a estas variables del `docker-compose.yml`:
+
+```yaml
+environment:
+  REDIS_HOST: redis
+  MONGO_HOST: mongodb
+```
+
+Para lanzar la analítica dentro del mismo contenedor, con `app` en marcha:
+
+```bash
+docker compose exec app python src/analytics_mongo.py
+```
+
+| Variable | Por defecto (local) | En Docker |
+|---|---|---|
+| `REDIS_HOST` | `localhost` | `redis` |
+| `REDIS_PORT` | `6379` | `6379` |
+| `MONGO_HOST` | `localhost` | `mongodb` |
+| `MONGO_PORT` | `27017` | `27017` |
+
+> No pongas `REDIS_HOST=redis` ni `MONGO_HOST=mongodb` en el `.env`: esos nombres solo existen dentro de la red de Docker, y en local fallaría la conexión. Si alguna vez hace falta, las variables que define `docker-compose.yml` tienen prioridad sobre las del `.env`.
 
 ---
 
@@ -371,7 +403,8 @@ db.episodios_urgencias.findOne()
 | Mensaje / síntoma | Causa | Solución |
 |---|---|---|
 | `ValueError: No se ha encontrado HMAC_SECRET en el archivo .env` | Falta el fichero `.env` o la variable | Crear `.env` en la raíz con `HMAC_SECRET=...`. |
-| `ConnectionError: Error de conexión con Redis` | El contenedor de Redis no está levantado | `docker compose up -d redis` y comprobar con `docker ps`. |
+| `ConnectionError: Error de conexión con Redis en localhost:6379` | El contenedor de Redis no está levantado | `docker compose up -d redis` y comprobar con `docker ps`. |
+| `Error de conexión con Redis en redis:6379 … Name or service not known` | Se ejecuta en local con `REDIS_HOST=redis` (o `MONGO_HOST=mongodb`) definido | Quitar esa variable del `.env` o de la terminal; en local debe ser `localhost`. |
 | `ServerSelectionTimeoutError` (pymongo) | MongoDB no está levantado | `docker compose up -d mongodb`. |
 | `Error en el worker: ...` repetido cada 5 s | La API del hospital no es accesible | Comprobar que se está en la red interna y que `http://10.201.59.248:28000/api/v1/urgencias/novedades` responde. |
 | `no configuration file provided: not found` | `docker compose` lanzado fuera de la raíz | Ejecutarlo desde la carpeta `EmergencyTracker` (el compose ya **no** está en `docker/`). |
@@ -433,13 +466,15 @@ Criterios de finalización definidos para el motor de colas:
 
 - [ ] Guardar en MongoDB los episodios dados de alta antes de liberarlos en Redis (último criterio de la tarjeta del motor de colas).
 - [ ] Detectar y corregir episodios con fecha de alta anterior a la de llegada en el ETL (ahora solo se descartan en la consulta de estancia media).
-- [ ] `main.py`: el worker es un bucle infinito, así que la anonimización que va detrás nunca llega a ejecutarse; además, el DataFrame anonimizado no se guarda. Conviene anonimizar antes de arrancar el worker y guardar el resultado (o cargarlo en MongoDB).
+- [x] `main.py`: la anonimización se ejecuta antes de arrancar el worker (antes iba detrás del bucle infinito y nunca llegaba a ejecutarse).
+- [ ] `main.py`: el DataFrame anonimizado no se guarda; conviene guardarlo o cargarlo en MongoDB.
 - [ ] `analytics_mongo.py` no se llama desde `main.py` y carga los datos **sin anonimizar**.
 - [ ] Consulta 1 de MongoDB: `categoria_patologia` está dentro de `triaje_manchester`, por lo que el filtro debería usar `triaje_manchester.categoria_patologia`; tal como está no devuelve resultados.
 - [ ] Consulta 2 de MongoDB: filtra `"Desconocido"`, pero el ETL lo deja en minúsculas (`"desconocido"`).
 - [ ] Unificar los valores de `destino_alta` (`alta_traslado_uci` / `traslado_uci`, `alta_domicilio` / `domicilio`, `alta`…).
 - [ ] `urgencias_worker.api_hospital`: `raise(f"...")` lanza una cadena (provoca `TypeError` en vez del mensaje previsto) y si la API no devuelve 200 la función devuelve `None`. El worker no se cae porque lo captura el `except` general, pero el mensaje que se muestra no es el correcto. Solución: `raise ConnectionError(f"...") from error` y `response.raise_for_status()`.
-- [ ] `triage_redis.py`: las funciones `obtener_boxes`, `obtener_box_libre`, `ocupar_box` y `liberar_box` están definidas dos veces; `liberar_box` no devuelve `True`, por lo que `alta_paciente` libera el box pero no lo informa.
+- [x] `triage_redis.py`: eliminadas las funciones duplicadas por el merge.
+- [ ] `triage_redis.py`: `liberar_box` no devuelve `True`, por lo que `alta_paciente` libera el box pero no lo informa.
 - [ ] El worker asigna como máximo un paciente por ciclo de 5 segundos aunque haya varios boxes libres.
-- [ ] Conexiones a Redis y MongoDB fijadas a `localhost`: leer el host de una variable de entorno para poder ejecutar el servicio `app` dentro de Docker.
+- [x] Hosts de Redis y MongoDB leídos de variables de entorno (`REDIS_HOST`, `MONGO_HOST`…) para poder ejecutar el servicio `app` dentro de Docker.
 - [ ] Fijar la versión de `python-dotenv` en `requirements.txt`.
