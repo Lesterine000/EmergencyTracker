@@ -7,16 +7,22 @@ import src.triage_redis as triage_redis
 def api_hospital(ruta_api:str):
     try:
         response = requests.get(ruta_api, timeout=5)
-        if response.status_code == 200:
-            return response.json()
+
+        response.raise_for_status()
+
+        return response.json()
+        
     except requests.exceptions.HTTPError as http_error:
-        raise(f"Error http{http_error}")
+        raise ConnectionError(f"Error HTTP: {http_error}") from http_error
+
     except requests.exceptions.ConnectTimeout as timeout:
-        raise(f"Tiempo de espera demasiado largo{timeout}")
+        raise ConnectionError(f"Tiempo de espera demasiado largo: {timeout}") from timeout
+
     except requests.exceptions.ConnectionError as conection:
-        raise(f"Ocurrion un error con la conexion{conection}")
+        raise ConnectionError(f"Ocurrió un error con la conexión: {conection}") from conection
+
     except requests.exceptions.RequestException as exception:
-        raise(f"Ocurrio un error inesperado{exception}")
+        raise ConnectionError(f"Ocurrió un error inesperado: {exception}") from exception
 
 def worker_urgencias(r):
     print("Iniciando el worker de urgencias...")
@@ -38,10 +44,13 @@ def worker_urgencias(r):
             for ingreso in nuevos_ingresos:
                 triage_redis.añadir_paciente_cola_espera(r, ingreso)
 
-            triage_redis.añadir_paciente_box(r)
+            while triage_redis.obtener_box_libre(r) is not None:
+                if not triage_redis.añadir_paciente_box(r):
+                    break
+
 
             for box in triage_redis.obtener_boxes(r):
-                print(f"Box {box} está libre.")
+                print(f"Box {box} está {box['estado']}.")
 
         except requests.exceptions.RequestException as request_error:
             print(f"Error en la solicitud HTTP: {request_error}")

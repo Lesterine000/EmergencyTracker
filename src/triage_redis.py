@@ -60,11 +60,13 @@ def ocupar_box(r, box_id, id_episodio):
     return True
 # Liberamos un box
 def liberar_box(r, box_id):
-    r.hset(f"box:{box_id}", mapping={
+    if r.hset(f"box:{box_id}", mapping={
         "estado": "LIBRE",
         "id_episodio": "",
         "hora_entrada": ""
-    })
+    }):
+        return True
+    return False
 
 
 def añadir_paciente_cola_espera(r, paciente):
@@ -132,10 +134,12 @@ def alta_paciente(r, alta):
                 )
 
                 return True
+            
             return False
-        if r.zrem("urgencias:cola_espera", id_episodio):
-            print(f"Episodio {id_episodio} retirado de la cola por alta.")
-            return True
+        
+    if r.zrem("urgencias:cola_espera", id_episodio):
+        print(f"Episodio {id_episodio} retirado de la cola por alta.")
+        return True
 
     print(f"El episodio {id_episodio} no está registrado en Redis.")
     return False
