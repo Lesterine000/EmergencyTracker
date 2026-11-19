@@ -96,32 +96,13 @@ def destino_alta_por_grupo_edad() -> list[dict]:
                 },
                 "edad": {
                     "$exists": True,
-                    "$gt": 0,
-                    "$lt": 130
+                    "$nin": [None, "desconocido"]
                 }
             }
         },
-        # Calcular rango decenal: "0-9", "10-19", "20-29", etc.
+        # El anonymizer ya entrega edad como "0-9", "10-19", etc.
         {
-            "$addFields": {
-                "grupo_edad": {
-                    "$concat": [
-                        {"$toString": {
-                            "$multiply": [{"$floor": {"$divide": ["$edad", 10]}}, 10]
-                        }},
-                        "-",
-                        {"$toString": {
-                            "$subtract": [
-                                {"$multiply": [
-                                    {"$add": [{"$floor": {"$divide": ["$edad", 10]}}, 1]},
-                                    10
-                                ]},
-                                1
-                            ]
-                        }}
-                    ]
-                }
-            }
+            "$addFields": {"grupo_edad": "$edad"}
         },
         # Contar por grupo + destino
         {
