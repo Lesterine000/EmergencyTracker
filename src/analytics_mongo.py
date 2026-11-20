@@ -87,31 +87,19 @@ def destino_alta_por_grupo_edad() -> list[dict]:
     pipeline = [
         {
             "$match": {
-                "destino_alta": {"$exists": True, "$nin": [None, "Desconocido"]},
-                "edad":         {"$exists": True, "$gt": 0, "$lt": 130}
-            }
-        },
-        # Rango decenal: "60-69", "70-79", etc.
-        {
-            "$addFields": {
-                "grupo_edad": {
-                    "$concat": [
-                        {"$toString": {
-                            "$multiply": [{"$floor": {"$divide": ["$edad", 10]}}, 10]
-                        }},
-                        "-",
-                        {"$toString": {
-                            "$subtract": [
-                                {"$multiply": [
-                                    {"$add": [{"$floor": {"$divide": ["$edad", 10]}}, 1]},
-                                    10
-                                ]},
-                                1
-                            ]
-                        }}
-                    ]
+                "destino_alta": {
+                    "$exists": True,
+                    "$nin": [None, "desconocido"]
+                },
+                "edad": {
+                    "$exists": True,
+                    "$nin": [None, "desconocido"]
                 }
             }
+        },
+        # El anonymizer ya entrega edad como "0-9", "10-19", etc.
+        {
+            "$addFields": {"grupo_edad": "$edad"}
         },
         # Contar por grupo + destino
         {
