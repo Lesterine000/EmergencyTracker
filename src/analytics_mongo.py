@@ -153,6 +153,28 @@ def destino_alta_por_grupo_edad() -> list[dict]:
 
     return list(col.aggregate(pipeline))
 
+def alta_paciente_mongo(paciente):
+    col = get_collection()
+
+    id_episodio = paciente["id_episodio"]
+
+    resultado = col.update_one(
+        {"id_episodio": id_episodio},
+        {
+            "$set":
+            {
+                "timestamp_alta": paciente["timestamp_alta"],
+                "destino_alta": paciente["destino_alta"]
+            }
+        }
+    )
+    if resultado.matched_count > 0:
+        print(f"Alta del episodio {id_episodio} registrada en mongo")
+        return True
+
+    print(f"El episodio {id_episodio} no existe en mongo")
+    return False
+
 # MAIN
 if __name__ == "__main__":
     from etl_historico import etl_historico
