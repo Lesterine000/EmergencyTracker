@@ -1,6 +1,6 @@
 from pymongo import MongoClient, ASCENDING
 from pymongo.errors import BulkWriteError, PyMongoError
-from config import MONGO_URI, MONGO_DB, MONGO_COLLECTION
+from src.config import MONGO_URI, MONGO_DB, MONGO_COLLECTION
 
 # ─── CONEXIÓN ────────────────────────────────────────────────────────────────
 # Fix #1: Cliente global para reutilizar el pool de conexiones y evitar fugas.
@@ -261,17 +261,15 @@ def alta_paciente_mongo(paciente: dict) -> bool:
     """
     Registra el alta de un episodio en MongoDB.
 
-    Fix #3 + #4: convierte timestamp_alta a epoch float antes de escribir,
-    para mantener coherencia con el formato que espera el pipeline de agregación.
-    Captura errores de conexión.
+    Usa upsert: si el ingreso no se vio (paciente anterior al arranque del
+    worker), el alta se crea igualmente para poder liberar el box en Redis.
     """
     try:
         col = get_collection()
         id_episodio = paciente["id_episodio"]
 
-        # Fix #3: garantizar que timestamp_alta sea epoch float
         ts_alta = paciente["timestamp_alta"]
-        if hasattr(ts_alta, "timestamp"):        # es un datetime de Python
+        if hasattr(ts_alta, "timestamp"):        # datetime de Python
             ts_alta = ts_alta.timestamp()
         elif not isinstance(ts_alta, (int, float)):
             raise ValueError(
@@ -283,16 +281,18 @@ def alta_paciente_mongo(paciente: dict) -> bool:
             {
                 "$set": {
                     "timestamp_alta": ts_alta,
-                    "destino_alta":   paciente["destino_alta"]
-                }
-            }
+                    "destino_alta": paciente["destino_alta"],
+                },
+                "$setOnInsert": {"id_episodio": id_episodio},
+            },
+            upsert=True,
         )
 
-        if resultado.matched_count > 0:
+        if resultado.matched_count > 0 or resultado.upserted_id is not None:
             print(f"Alta del episodio {id_episodio} registrada en mongo")
             return True
 
-        print(f"El episodio {id_episodio} no existe en mongo")
+        print(f"No se pudo registrar el alta del episodio {id_episodio}")
         return False
 
     except PyMongoError as e:
@@ -308,8 +308,8 @@ def alta_paciente_mongo(paciente: dict) -> bool:
 if __name__ == "__main__":
     # Fix #6: pandas importado solo cuando se ejecuta este script directamente
     import pandas as pd
-    from etl_historico import etl_historico
-    from config import RUTA_CSV, RUTA_JSON
+    from src.etl_historico import etl_historico
+    from src.config import RUTA_CSV, RUTA_JSON
 
     # Fix #2: índice creado una sola vez al arrancar
     init_index()

@@ -4,6 +4,7 @@ from src import config
 from src import urgencias_worker
 from src import triage_redis
 from src import anonymizer
+from src import analytics_mongo as mongo
 
 def main():
     print('Iniciando emergency tracker')
@@ -30,7 +31,8 @@ def main():
 
     # Realiza la conexion con Redis y ejecutamos el worker de urgencias
     r = redisConecction()
-    
+
+    mongo.init_index()
     triage_redis.inicializar_redis(r)
 
     urgencias_worker.urgencias(r)

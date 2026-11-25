@@ -33,3 +33,18 @@ HMAC_SECRET = os.getenv("HMAC_SECRET")
 
 if not HMAC_SECRET:
     raise ValueError("No se ha encontrado HMAC_SECRET en el archivo .env")
+
+# ─── DEMO: ROTACIÓN DE BOXES ────────────────────────────────────────────────
+# Minutos máximos que un paciente puede ocupar un box antes de forzar su alta.
+# 0 desactiva la rotación automática (se espera el alta real de la API).
+try:
+    MAX_STAY_MIN = int(os.getenv("MAX_STAY_MIN", "3"))
+except ValueError:
+    MAX_STAY_MIN = 3
+
+# 1 = vaciar cola y boxes al arrancar (demo limpia); 0 = conservar y sincronizar.
+RESET_REDIS = os.getenv("RESET_REDIS", "0") == "1"
+
+# Endpoints de apoyo del simulador
+RUTA_API_ESTADO = "http://10.201.59.248:28000/api/v1/simulador/estado"
+RUTA_API_FORZAR_ALTA = "http://10.201.59.248:28000/api/v1/profesor/forzar-alta"
