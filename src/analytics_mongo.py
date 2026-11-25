@@ -63,57 +63,95 @@ def cargar_episodios(documentos: list[dict]) -> dict:
 def estancia_media_por_patologia() -> list[dict]:
     """
     Tiempo medio de estancia (minutos) por categoria_patologia.
-    Solo episodios cerrados (timestamp_alta no nulo).
+     Solo episodios cerrados (timestamp_alta no nulo).
 
     REQUISITO: timestamp_llegada y timestamp_alta deben ser epoch en segundos
     (float/int). El operador $subtract entre dos números da la diferencia en
     la misma unidad; dividir por 60 convierte segundos → minutos.
+    Compatible con los datos históricos y los ingresos de la API.
     """
-    # Fix #4: try/except para errores de conexión
     try:
         col = get_collection()
 
         pipeline = [
-            {
-                "$match": {
-                    "timestamp_alta":      {"$exists": True, "$ne": None},
-                    "timestamp_llegada":   {"$exists": True, "$ne": None},
-                    "categoria_patologia": {"$exists": True, "$ne": None}
-                }
-            },
+            # Normalizar los campos del histórico y de la API
             {
                 "$addFields": {
+                    "timestamp_llegada": {
+                        "$ifNull": [
+                            "$timestamp_llegada",
+                            "$datos_admision.timestamp_llegada"
+                        ]
+                    },
+                    "categoria_patologia": {
+                        "$ifNull": [
+                            "$triaje_manchester.categoria_patologia",
+                            "$datos_triaje.categoria_patologia"
+                        ]
+                    }
+                }
+            },
+
+            # Comprobar que existen los campos y son válidos
+            {
+                "$match": {
+                    "timestamp_alta": {"$type": "number"},
+                    "timestamp_llegada": {"$type": "number"},
+                    "categoria_patologia": {"$type": "string"}
+                }
+            },
+
+            # Calcular la estancia y normalizar la categoría
+            {
+                "$addFields": {
+                    "categoria_patologia": {
+                        "$toLower": "$categoria_patologia"
+                    },
                     "estancia_min": {
                         "$divide": [
-                            {"$subtract": ["$timestamp_alta", "$timestamp_llegada"]},
+                            {
+                                "$subtract": [
+                                    "$timestamp_alta",
+                                    "$timestamp_llegada"
+                                ]
+                            },
                             60
                         ]
                     }
                 }
             },
-            # Descartar duraciones imposibles (negativas o más de 7 días)
+
+            # Descartar duraciones imposibles
             {
                 "$match": {
                     "estancia_min": {"$gt": 0, "$lt": 10080}
                 }
             },
+
+            # Agrupar por categoría patológica
             {
                 "$group": {
                     "_id": "$categoria_patologia",
                     "estancia_media_min": {"$avg": "$estancia_min"},
-                    "total_episodios":    {"$sum": 1}
+                    "total_episodios": {"$sum": 1}
                 }
             },
+
             {"$sort": {"estancia_media_min": -1}},
+
+            # Formatear el resultado
             {
                 "$project": {
                     "_id": 0,
                     "categoria_patologia": "$_id",
-                    "estancia_media_min":  {"$round": ["$estancia_media_min", 2]},
-                    "total_episodios":     1
+                    "estancia_media_min": {
+                        "$round": ["$estancia_media_min", 2]
+                    },
+                    "total_episodios": 1
                 }
             }
         ]
+
         return list(col.aggregate(pipeline))
 
     except PyMongoError as e:
