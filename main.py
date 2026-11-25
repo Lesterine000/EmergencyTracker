@@ -29,6 +29,9 @@ def main():
         config.HMAC_SECRET
     )
 
+    # Histórico anonimizado → MongoDB
+    mongo.cargar_historico(df_anonimizado)
+
     # Realiza la conexion con Redis y ejecutamos el worker de urgencias
     r = redisConecction()
 
