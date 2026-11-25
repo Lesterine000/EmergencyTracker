@@ -4,7 +4,7 @@ from src.config import MONGO_URI, MONGO_DB, MONGO_COLLECTION
 
 # ─── CONEXIÓN ────────────────────────────────────────────────────────────────
 # Fix #1: Cliente global para reutilizar el pool de conexiones y evitar fugas.
-# Fix #6: pandas eliminado del nivel de módulo; se importa solo en __main__.
+# Fix #6: pandas eliminado del nivel de módulo; se importa solo cuando hace falta.
 
 _client = None
 
@@ -58,12 +58,40 @@ def cargar_episodios(documentos: list[dict]) -> dict:
         return {"insertados": 0, "duplicados": 0}
 
 
+def cargar_historico(df_anonimizado) -> dict:
+    """
+    Carga en MongoDB el histórico YA ANONIMIZADO.
+
+    Convierte timestamp_llegada y timestamp_alta a epoch (segundos), que es el
+    formato que necesitan las agregaciones para restar las fechas, y garantiza
+    que el índice único existe antes de insertar.
+
+    El DataFrame debe venir de anonymizer.anonimizar_dataframe(), es decir:
+    SIP con HMAC, edad en rangos decenales ("30-39") y sin nombres.
+    """
+    import pandas as pd
+
+    df = df_anonimizado.copy()
+
+    for campo in ("timestamp_llegada", "timestamp_alta"):
+        if campo in df.columns:
+            df[campo] = df[campo].apply(
+                lambda x: (
+                    None if pd.isna(x)
+                    else (x.timestamp() if hasattr(x, "timestamp") else x)
+                )
+            )
+
+    init_index()
+    return cargar_episodios(df.to_dict(orient="records"))
+
+
 # ─── CONSULTA 1: Estancia media por categoría patológica ────────────────────
 
 def estancia_media_por_patologia() -> list[dict]:
     """
     Tiempo medio de estancia (minutos) por categoria_patologia.
-     Solo episodios cerrados (timestamp_alta no nulo).
+    Solo episodios cerrados (timestamp_alta no nulo).
 
     REQUISITO: timestamp_llegada y timestamp_alta deben ser epoch en segundos
     (float/int). El operador $subtract entre dos números da la diferencia en
@@ -164,8 +192,14 @@ def estancia_media_por_patologia() -> list[dict]:
 def destino_alta_por_grupo_edad() -> list[dict]:
     """
     Distribución porcentual de destino_alta agrupada por rangos decenales
-    de edad. La conversión de edad numérica a rango (ej: 23 → "20-29") se
-    hace directamente en el pipeline, sin depender del ETL ni del anonymizer.
+    de edad.
+
+    Acepta dos formatos de edad:
+      - numérica (histórico antiguo): 23 → "20-29"
+      - rango ya anonimizado (anonymizer): "20-29" se usa tal cual
+
+    Así la consulta funciona antes y después de anonimizar el histórico, sin
+    tener que recargar los documentos ya existentes.
     """
     # Fix #4: try/except para errores de conexión
     try:
@@ -184,17 +218,33 @@ def destino_alta_por_grupo_edad() -> list[dict]:
                     }
                 }
             },
-            # Convertir edad numérica a rango decenal: 23 → "20-29", 0 → "0-9"
-            # Se guarda también limite_inferior (numérico) para ordenar correctamente.
+            # Normalizar la edad:
+            #   - histórico anonimizado → ya viene como "20-29"
+            #   - histórico numérico     → 23 se convierte en "20-29"
             {
                 "$addFields": {
-                    "limite_inferior": {"$multiply": [{"$floor": {"$divide": ["$edad", 10]}}, 10]},
                     "grupo_edad": {
-                        "$concat": [
-                            {"$toString": {"$multiply": [{"$floor": {"$divide": ["$edad", 10]}}, 10]}},
-                            "-",
-                            {"$toString": {"$subtract": [{"$multiply": [{"$add": [{"$floor": {"$divide": ["$edad", 10]}}, 1]}, 10]}, 1]}}
+                        "$cond": [
+                            {"$eq": [{"$type": "$edad"}, "string"]},
+                            "$edad",
+                            {
+                                "$concat": [
+                                    {"$toString": {"$multiply": [{"$floor": {"$divide": ["$edad", 10]}}, 10]}},
+                                    "-",
+                                    {"$toString": {"$subtract": [{"$multiply": [{"$add": [{"$floor": {"$divide": ["$edad", 10]}}, 1]}, 10]}, 1]}}
+                                ]
+                            }
                         ]
+                    }
+                }
+            },
+            # Orden numérico del grupo: "20-29" → 20
+            {
+                "$addFields": {
+                    "limite_inferior": {
+                        "$toInt": {
+                            "$arrayElemAt": [{"$split": ["$grupo_edad", "-"]}, 0]
+                        }
                     }
                 }
             },
@@ -306,28 +356,18 @@ def alta_paciente_mongo(paciente: dict) -> bool:
 # ─── MAIN ────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    # Fix #6: pandas importado solo cuando se ejecuta este script directamente
-    import pandas as pd
     from src.etl_historico import etl_historico
-    from src.config import RUTA_CSV, RUTA_JSON
-
-    # Fix #2: índice creado una sola vez al arrancar
-    init_index()
+    from src.anonymizer import anonimizar_dataframe
+    from src.config import RUTA_CSV, RUTA_JSON, HMAC_SECRET
 
     print("Ejecutando ETL...")
     df = etl_historico(RUTA_CSV, RUTA_JSON)
 
-    # Convertir timestamps a epoch float para que $subtract funcione en Mongo
-    for campo in ["timestamp_llegada", "timestamp_alta"]:
-        if campo in df.columns:
-            df[campo] = df[campo].apply(
-                lambda x: x.timestamp() if pd.notna(x) else None
-            )
-
-    documentos = df.to_dict(orient="records")
+    print("Anonimizando histórico...")
+    df = anonimizar_dataframe(df, HMAC_SECRET)
 
     print("Cargando en MongoDB...")
-    cargar_episodios(documentos)
+    cargar_historico(df)
 
     print("\n──────────────────────────────────────────")
     print("  Estancia media (min) por categoría patológica")
